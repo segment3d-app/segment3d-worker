@@ -1,4 +1,3 @@
-
 import functools
 import logging
 import time
@@ -15,232 +14,364 @@ LOG = logging.getLogger(__name__)
 
 
 class Consumer:
-    def __init__(self, parameters: Parameters, exchange_name: str, exchange_type: ExchangeType, queue_name: str, routing_key: str):
+    """
+    RabbitMQ consumer that will handle unexpected interactions such as channel
+    and connection closures.
+
+    If RabbitMQ closes the connection, the class will stop and indicate that
+    reconnection is necessary. There are limited reasons why the connection
+    may be closed, which usually are tied to permission related issues or
+    socket timeouts, which will be logged in the output.
+    """
+
+    def __init__(
+        self,
+        parameters: Parameters,
+        exchange_name: str,
+        exchange_type: ExchangeType,
+        queue_name: str,
+        routing_key: str,
+    ):
         self.should_reconnect = False
         self.was_consuming = False
 
-        self._parameters = parameters
-        self._exchange_name = exchange_name
-        self._exchange_type = exchange_type
-        self._queue_name = queue_name
-        self._routing_key = routing_key
+        self.__parameters = parameters
+        self.__exchange_name = exchange_name
+        self.__exchange_type = exchange_type
+        self.__queue_name = queue_name
+        self.__routing_key = routing_key
 
-        self._channel = None
-        self._connection = None
-        self._consumer_tag = None
+        self.__channel = None
+        self.__connection = None
+        self.__consumer_tag = None
 
-        self._consuming = False
-        self._closing = False
+        self.__consuming = False
+        self.__closing = False
 
-        self._prefetch_count = 1
+        self.__prefetch_count = 1
 
-    def connect(self) -> AsyncioConnection:
-        LOG.info('Connecting to %s', self._parameters.host)
+    def __connect(self) -> AsyncioConnection:
+        """Establishes the connection to the RabbitMQ server."""
+
+        LOG.info("Connecting to %s", self.__parameters.host)
         return AsyncioConnection(
-            parameters=self._parameters,
-            on_open_error_callback=self.on_connection_open_error,
-            on_open_callback=self.on_connection_open,
-            on_close_callback=self.on_connection_closed)
+            parameters=self.__parameters,
+            on_open_error_callback=self.__on_connection_open_error,
+            on_open_callback=self.__on_connection_open,
+            on_close_callback=self.__on_connection_closed,
+        )
 
-    def on_connection_open_error(self, _: AsyncioConnection, error: BaseException):
-        LOG.error('Connection open failed: %s', error)
-        self.reconnect()
+    def __on_connection_open_error(self, _: AsyncioConnection, error: BaseException):
+        """Called when the connection failed to open, triggering reconnection."""
 
-    def on_connection_open(self, _: AsyncioConnection):
-        LOG.info('Connection opened')
-        self.open_channel()
+        LOG.error("Connection open failed: %s", error)
+        self.__reconnect()
 
-    def on_connection_closed(self, _: AsyncioConnection, reason: BaseException):
-        self._channel = None
+    def __on_connection_open(self, _: AsyncioConnection):
+        """Called when the connection is successfully opened."""
+
+        LOG.info("Connection opened")
+        self.__open_channel()
+
+    def __on_connection_closed(self, _: AsyncioConnection, reason: BaseException):
+        """
+        Called when the connection is closed, either intentionally or
+        unintentionally from connections issues.
+        """
+
+        self.__channel = None
 
         # Close event is coming from internal
-        if self._closing:
-            self._connection.ioloop.stop()
+        if self.__closing:
+            self.__connection.ioloop.stop()
 
         # Close event is coming from unknown external reason
         else:
-            LOG.warning(
-                'Connection closed, reconnect necessary: %s', reason)
-            self.reconnect()
+            LOG.warning("Connection closed, reconnect necessary: %s", reason)
+            self.__reconnect()
 
-    def close_connection(self):
-        self._consuming = False
-        if self._connection.is_closing or self._connection.is_closed:
-            LOG.info('Connection is closing or already closed')
+    def __close_connection(self):
+        """Closes the connection."""
+
+        self.__consuming = False
+
+        if self.__connection.is_closing or self.__connection.is_closed:
+            LOG.info("Connection is closing or already closed")
+
         else:
-            LOG.info('Closing connection')
-            self._connection.close()
+            LOG.info("Closing connection")
+            self.__connection.close()
 
-    def reconnect(self):
+    def __reconnect(self):
+        """Requests for reconnection in case of connection closure."""
+
         self.should_reconnect = True
         self.stop()
 
-    def open_channel(self):
-        LOG.info('Creating a new channel')
-        self._connection.channel(on_open_callback=self.on_channel_open)
+    def __open_channel(self):
+        """Opens a new channel on the established connection."""
 
-    def on_channel_open(self, channel: Channel):
-        LOG.info('Channel opened')
-        self._channel = channel
-        self._channel.add_on_close_callback(self.on_channel_closed)
+        LOG.info("Creating a new channel")
+        self.__connection.channel(on_open_callback=self.__on_channel_open)
 
-        self.setup_exchange(self._exchange_name)
+    def __on_channel_open(self, channel: Channel):
+        """Called when the channel is successfully opened."""
 
-    def on_channel_closed(self, channel: Channel, reason: BaseException):
-        LOG.warning('Channel %i was closed: %s', channel, reason)
-        self.close_connection()
+        LOG.info("Channel opened")
+        self.__channel = channel
+        self.__channel.add_on_close_callback(self.__on_channel_closed)
 
-    def setup_exchange(self, exchange_name: str):
-        LOG.info('Declaring exchange: %s', exchange_name)
+        self.__setup_exchange()
 
-        callback = functools.partial(
-            self.on_exchange_declareok, exchange_name=exchange_name)
-        self._channel.exchange_declare(
-            exchange=exchange_name,
-            exchange_type=self._exchange_type,
-            callback=callback)
+    def __on_channel_closed(self, channel: Channel, reason: BaseException):
+        """Called when the channel is closed, triggering connection closure."""
 
-    def on_exchange_declareok(self, _: Method, exchange_name: str):
-        LOG.info('Exchange declared: %s', exchange_name)
-        self.setup_queue(self._queue_name)
+        LOG.warning("Channel %i was closed: %s", channel, reason)
+        self.__close_connection()
 
-    def setup_queue(self, queue_name: str):
-        LOG.info('Declaring queue %s', queue_name)
+    def __setup_exchange(self):
+        """Declares the exchange on the channel."""
 
-        callback = functools.partial(
-            self.on_queue_declareok, queue_name=queue_name)
-        self._channel.queue_declare(queue=queue_name, callback=callback)
+        LOG.info("Declaring exchange: %s", self.__exchange_name)
+        self.__channel.exchange_declare(
+            exchange=self.__exchange_name,
+            exchange_type=self.__exchange_type,
+            callback=self.__on_exchange_declareok,
+        )
 
-    def on_queue_declareok(self, _: Method, queue_name: str):
-        LOG.info('Binding %s to %s with %s', self._exchange_name,
-                 queue_name, self._routing_key)
+    def __on_exchange_declareok(self, _: Method):
+        """Called when the exchange is successfully declared."""
 
-        callback = functools.partial(self.on_bindok, queue_name=queue_name)
-        self._channel.queue_bind(
-            queue_name,
-            self._exchange_name,
-            routing_key=self._routing_key,
-            callback=callback)
+        LOG.info("Exchange declared: %s", self.__exchange_name)
+        self.__setup_queue()
 
-    def on_bindok(self, _: Method, queue_name: str):
-        LOG.info('Queue bound: %s', queue_name)
-        self.set_qos()
+    def __setup_queue(self):
+        """Declares the queue on the channel."""
 
-    def set_qos(self):
-        self._channel.basic_qos(
-            prefetch_count=self._prefetch_count, callback=self.on_basic_qos_ok)
+        LOG.info("Declaring queue %s", self.__queue_name)
+        self.__channel.queue_declare(
+            queue=self.__queue_name, callback=self.__on_queue_declareok
+        )
 
-    def on_basic_qos_ok(self, _: Method):
-        LOG.info('QOS set to: %d', self._prefetch_count)
-        self.start_consuming()
+    def __on_queue_declareok(self, _: Method):
+        """Called when the queue is successfully declared, binding the queue."""
 
-    def start_consuming(self):
-        LOG.info('Issuing consumer related RPC commands')
+        LOG.info(
+            "Binding %s to %s with %s",
+            self.__exchange_name,
+            self.__queue_name,
+            self.__routing_key,
+        )
 
-        self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
-        self._consumer_tag = self._channel.basic_consume(
-            self._queue_name, self.on_message)
+        self.__channel.queue_bind(
+            self.__queue_name,
+            self.__exchange_name,
+            routing_key=self.__routing_key,
+            callback=self.__on_bindok,
+        )
+
+    def __on_bindok(self, _: Method):
+        """Called when the queue is successfully bound, spcifying  the qos."""
+
+        LOG.info("Queue bound: %s", self.__queue_name)
+        self.__set_qos()
+
+    def __set_qos(self):
+        """Specifies quality of service for the queue."""
+
+        self.__channel.basic_qos(
+            prefetch_count=self.__prefetch_count, callback=self.__on_basic_qos_ok
+        )
+
+    def __on_basic_qos_ok(self, _: Method):
+        """Called when the QOS is accepted."""
+
+        LOG.info("QOS set to: %d", self.__prefetch_count)
+        self.__start_consuming()
+
+    def __start_consuming(self):
+        """Starts the consumption of messages from the queue."""
+
+        LOG.info("Issuing consumer related RPC commands")
+
+        self.__channel.add_on_cancel_callback(self.__on_consumer_cancelled)
+        self.__consumer_tag = self.__channel.basic_consume(
+            self.__queue_name, self.__on_message
+        )
 
         self.was_consuming = True
-        self._consuming = True
+        self.__consuming = True
 
-    def on_consumer_cancelled(self, method_frame: Method):
-        LOG.info('Consumer was cancelled remotely, shutting down: %r',
-                 method_frame)
+    def __on_consumer_cancelled(self, method_frame: Method):
+        """Called when the channel is closed remotely."""
 
-        if self._channel:
-            self._channel.close()
+        LOG.info("Consumer was cancelled remotely, shutting down: %r", method_frame)
 
-    def on_message(self, _: Channel, basic_deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
-        LOG.info('Received message # %s from %s: %s',
-                 basic_deliver.delivery_tag, properties.app_id, body)
-        self.acknowledge_message(basic_deliver.delivery_tag)
+        if self.__channel:
+            self.__channel.close()
 
-    def acknowledge_message(self, delivery_tag: int):
-        LOG.info('Acknowledging message %s', delivery_tag)
-        self._channel.basic_ack(delivery_tag)
+    def __on_message(
+        self,
+        _: Channel,
+        basic_deliver: Basic.Deliver,
+        properties: BasicProperties,
+        body: bytes,
+    ):
+        """Called when a message is received from the queue."""
+
+        LOG.info(
+            "Received message # %s from %s: %s",
+            basic_deliver.delivery_tag,
+            properties.app_id,
+            body,
+        )
+        self.__acknowledge_message(basic_deliver.delivery_tag)
+
+    def __acknowledge_message(self, delivery_tag: int):
+        """Acknowledges that a message has been received and processed."""
+
+        LOG.info("Acknowledging message %s", delivery_tag)
+        self.__channel.basic_ack(delivery_tag)
 
     def stop_consuming(self):
-        if self._channel:
-            LOG.info('Sending a Basic.Cancel RPC command to RabbitMQ')
+        """Stops the consumption of messages."""
 
-            callback = functools.partial(
-                self.on_cancelok, consumer_tag=self._consumer_tag)
-            self._channel.basic_cancel(self._consumer_tag, callback)
+        if self.__channel:
+            LOG.info("Sending a Basic.Cancel RPC command to RabbitMQ")
+            self.__channel.basic_cancel(self.__consumer_tag, self.__on_cancelok)
 
-    def on_cancelok(self, _: Method, consumer_tag: str):
+    def __on_cancelok(self, _: Method):
+        """Called when the cancellation is accepted."""
+
         LOG.info(
-            'RabbitMQ acknowledged the cancellation of the consumer: %s',
-            consumer_tag)
+            "RabbitMQ acknowledged the cancellation of the consumer: %s",
+            self.__consumer_tag,
+        )
 
-        self._consuming = False
-        self.close_channel()
+        self.__consuming = False
+        self.__close_channel()
 
-    def close_channel(self):
-        LOG.info('Closing the channel')
-        self._channel.close()
+    def __close_channel(self):
+        """Closes the channel."""
+
+        LOG.info("Closing the channel")
+        self.__channel.close()
 
     def run(self):
-        self._connection = self.connect()
-        self._connection.ioloop.run_forever()
+        """Starts the consumer by connecting and entering the I/O loop."""
+
+        self.__connection = self.__connect()
+        self.__connection.ioloop.run_forever()
 
     def stop(self):
-        if self._closing:
+        """Stops the consumer and exits the I/O loop."""
+
+        if self.__closing:
             return
 
-        LOG.info('Stopping')
-        self._closing = True
+        LOG.info("Stopping")
+        self.__closing = True
 
-        if self._consuming:
+        if self.__consuming:
             self.stop_consuming()
-            self._connection.ioloop.run_forever()
+            self.__connection.ioloop.run_forever()
 
         else:
-            self._connection.ioloop.stop()
+            self.__connection.ioloop.stop()
 
-        LOG.info('Stopped')
+        LOG.info("Stopped")
 
 
 class ReconnectingConsumer:
-    def __init__(self, parameters: Parameters, exchange_name: str, exchange_type: ExchangeType, queue_name: str, routing_key: str):
-        self._reconnect_delay = 0
+    """
+    RabbitMQ consumer that automatically tries to reconnect on connection failures.
 
-        self._parameters = parameters
-        self._exchange_name = exchange_name
-        self._exchange_type = exchange_type
-        self._queue_name = queue_name
-        self._routing_key = routing_key
+    This class wraps around the Consumer class, adding automatic reconnection logic.
+    It handles the lifecycle of a RabbitMQ consumer, including starting, stopping,
+    and managing reconnection attempts after unexpected issues.
+    """
 
-        self._consumer = Consumer(self._parameters, self._exchange_name,
-                                  self._exchange_type, self._queue_name, self._routing_key)
+    def __init__(
+        self,
+        parameters: Parameters,
+        exchange_name: str,
+        exchange_type: ExchangeType,
+        queue_name: str,
+        routing_key: str,
+    ):
+        """
+        Initializes the ReconnectingConsumer instance
+
+        Args:
+            parameters (Parameters): Configuration for the connection.
+            exchange_name (str): The name of the exchange to use.
+            exchange_type (ExchangeType): The type of exchange (direct, topic, etc.).
+            queue_name (str): The name of the queue to bind to.
+            routing_key (str): The routing key for message delivery.
+        """
+        self.__reconnect_delay = 0
+
+        self.__parameters = parameters
+        self.__exchange_name = exchange_name
+        self.__exchange_type = exchange_type
+        self.__queue_name = queue_name
+        self.__routing_key = routing_key
+
+        self.__consumer = Consumer(
+            self.__parameters,
+            self.__exchange_name,
+            self.__exchange_type,
+            self.__queue_name,
+            self.__routing_key,
+        )
 
     def run(self):
+        """Starts the consumer process in a loop."""
+
         while True:
             try:
-                self._consumer.run()
+                self.__consumer.run()
+
+            # Catches KeyboardInterrupt to allow for graceful shutdown.
             except KeyboardInterrupt:
-                self._consumer.stop()
+                self.__consumer.stop()
                 break
-            self._maybe_reconnect()
 
-    def _maybe_reconnect(self):
-        if self._consumer.should_reconnect:
-            self._consumer.stop()
+            # Check and handle reconnection logic if necessary.
+            self.__maybe_reconnect()
 
+    def __maybe_reconnect(self):
+        """Reconnects with original parameters if necessary."""
+
+        if self.__consumer.should_reconnect:
+            # Stops the current consumer.
+            self.__consumer.stop()
+
+            # Waits for a calculated delay before reconnecting.
             reconnect_delay = self._get_reconnect_delay()
-            LOG.info('Reconnecting after %d seconds', reconnect_delay)
+            LOG.info("Reconnecting after %d seconds", reconnect_delay)
 
             time.sleep(reconnect_delay)
-            self._consumer = Consumer(self._parameters, self._exchange_name,
-                                      self._exchange_type, self._queue_name, self._routing_key)
+            self.__consumer = Consumer(
+                self.__parameters,
+                self.__exchange_name,
+                self.__exchange_type,
+                self.__queue_name,
+                self.__routing_key,
+            )
 
     def _get_reconnect_delay(self):
-        if self._consumer.was_consuming:
-            self._reconnect_delay = 0
+        """
+        Calculates the delay before attempting to reconnect. The delay is
+        increased based on each failed attempt, up to a maximum limit.
+        """
+
+        if self.__consumer.was_consuming:
+            self.__reconnect_delay = 0
         else:
-            self._reconnect_delay += 1
+            self.__reconnect_delay += 1
 
-        if self._reconnect_delay > 30:
-            self._reconnect_delay = 30
+        if self.__reconnect_delay > 30:
+            self.__reconnect_delay = 30
 
-        return self._reconnect_delay
+        return self.__reconnect_delay
