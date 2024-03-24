@@ -9,3 +9,6 @@ venv/
 
 # Logs
 *.log
+
+# IDE configurations
+.vscode/
