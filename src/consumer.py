@@ -31,6 +31,7 @@ class Consumer:
         exchange_type: ExchangeType,
         queue_name: str,
         routing_key: str,
+        message_callback: callable,
     ):
         self.should_reconnect = False
         self.was_consuming = False
@@ -49,6 +50,8 @@ class Consumer:
         self.__closing = False
 
         self.__prefetch_count = 1
+
+        self.__message_callback = message_callback
 
     def __connect(self) -> AsyncioConnection:
         """Establishes the connection to the RabbitMQ server."""
@@ -210,7 +213,7 @@ class Consumer:
         if self.__channel:
             self.__channel.close()
 
-    def __on_message(
+    async def __on_message(
         self,
         _: Channel,
         basic_deliver: Basic.Deliver,
@@ -225,6 +228,8 @@ class Consumer:
             properties.app_id,
             body,
         )
+
+        await self.__message_callback(body)
         self.__acknowledge_message(basic_deliver.delivery_tag)
 
     def __acknowledge_message(self, delivery_tag: int):
@@ -298,6 +303,7 @@ class ReconnectingConsumer:
         exchange_type: ExchangeType,
         queue_name: str,
         routing_key: str,
+        message_callback: callable,
     ):
         """
         Initializes the ReconnectingConsumer instance
@@ -317,12 +323,15 @@ class ReconnectingConsumer:
         self.__queue_name = queue_name
         self.__routing_key = routing_key
 
+        self.__message_callback = message_callback
+
         self.__consumer = Consumer(
             self.__parameters,
             self.__exchange_name,
             self.__exchange_type,
             self.__queue_name,
             self.__routing_key,
+            self.__message_callback,
         )
 
     def run(self):

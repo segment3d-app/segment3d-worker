@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 from dotenv import load_dotenv
 
@@ -10,24 +11,37 @@ from src.consumer import ReconnectingConsumer
 
 
 def main():
-    credentials = pika.PlainCredentials(os.getenv("RABBITMQ_USER"),
-                                        os.getenv("RABBITMQ_PASSWORD"))
+    credentials = pika.PlainCredentials(
+        os.getenv("RABBITMQ_USER"), os.getenv("RABBITMQ_PASSWORD")
+    )
 
-    parameters = pika.ConnectionParameters(host=os.getenv("RABBITMQ_HOST"),
-                                           port=os.getenv("RABBITMQ_PORT"),
-                                           credentials=credentials)
+    parameters = pika.ConnectionParameters(
+        host=os.getenv("RABBITMQ_HOST"),
+        port=os.getenv("RABBITMQ_PORT"),
+        credentials=credentials,
+    )
 
-    consumer = ReconnectingConsumer(parameters=parameters,
-                                    exchange_name="test",
-                                    exchange_type=ExchangeType.direct,
-                                    queue_name="test",
-                                    routing_key="test")
+    async def task():
+        logging.info("Running tasks...")
+        time.sleep(10)
+        logging.info("Tasks run successfuly!")
+
+    consumer = ReconnectingConsumer(
+        parameters=parameters,
+        exchange_name="test",
+        exchange_type=ExchangeType.direct,
+        queue_name="test",
+        routing_key="test",
+        message_callback=task,
+    )
+
     consumer.run()
 
 
 if __name__ == "__main__":
     load_dotenv()
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s [%(levelname)s]: (%(name)s) %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s]: (%(name)s) %(message)s"
+    )
 
     main()
