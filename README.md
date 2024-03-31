@@ -9,14 +9,20 @@ using advanced algorithm for rendering and segmenting 3d scenes.
 
 ## Environment Variables
 
-Variables will be read from the `.env` file. Make sure to insert the correct 
-values. On your first setup, duplicate the env template:
+Variables will be read from the `.env` file. Make sure to insert the correct
+values.
+
+On your first setup, duplicate the env template:
 
 ```bash
 cp .env.example .env
 ```
 
 ## Development
+
+This section will show 2 options for running the service in development mode.
+
+### Manual Run
 
 Before development, prepare a Python virtual environment:
 
@@ -37,10 +43,36 @@ Then run the entry script:
 python main.py
 ```
 
-## Production
+### Docker Compose
 
-To run the production service, use this command to start Docker Compose:
+Another option is to use start the service with Docker Compose:
 
 ```bash
 docker compose up -d --build
+```
+
+## Production Build
+
+When everything is done and tested on local, we can publish the docker image
+to a registry. The easiest (and cheapest) registry is the
+[Docker Hub](https://hub.docker.com).  We can then pull the image from any 
+machine (including Kubernetes).
+
+First, build the docker image:
+
+```bash
+docker build -t segment3d-worker .
+```
+
+Before pushing the image to the hub, rename the tag to supported namespace:
+
+```bash
+# Namespace: <USERNAME>/<REPOSITORY>:<TAG>
+docker tag segment3d-worker marcellinoco/segment3d:segment3d-worker
+```
+
+Push the renamed tag to the registry:
+
+```bash
+docker push marcellinoco/segment3d:segment3d-worker
 ```
