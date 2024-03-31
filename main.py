@@ -29,13 +29,13 @@ async def main():
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=1)
 
-
     queue_name = os.getenv("RABBITMQ_QUEUE")
     queue = await channel.declare_queue(queue_name, durable=True)
 
     await queue.consume(task)
 
     try:
+        logging.info("Listening for messages. Press CTRL+C to exit.")
         await asyncio.Future()
     finally:
         await connection.close()
