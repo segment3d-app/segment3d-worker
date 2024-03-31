@@ -58,6 +58,10 @@ to a registry. The easiest (and cheapest) registry is the
 [Docker Hub](https://hub.docker.com). We can then pull the image from any
 machine (including Kubernetes).
 
+In this section, we provide 2 approaches to build and push image to registry.
+
+### Single-platform Build
+
 First, build the docker image:
 
 ```bash
@@ -75,6 +79,21 @@ Push the renamed tag to the registry:
 
 ```bash
 docker push marcellinoco/segment3d:segment3d-worker
+```
+
+### Multiplatform Build
+
+First, setup multiplatform docker builder:
+
+```bash
+docker buildx create --name multiarch-builder --driver docker-container --use
+docker buildx inspect --bootstrap
+```
+
+Next, build and push the docker image:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t marcellinoco/segment3d:segment3d-worker --push .
 ```
 
 ## Production Deployment
