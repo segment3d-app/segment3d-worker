@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: segment3d-worker
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: segment3d-worker
+
+  template:
+    metadata:
+      labels:
+        app: segment3d-worker
+
+    spec:
+      containers:
+        - name: segment3d-worker
+          image: marcellinoco/segment3d:segment3d-worker
+          envFrom:
+            - configMapRef:
+                name: segment3d-worker-configmap
