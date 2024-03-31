@@ -20,6 +20,7 @@ spec:
       containers:
         - name: segment3d-worker
           image: marcellinoco/segment3d:segment3d-worker
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: segment3d-worker-configmap
