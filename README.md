@@ -55,7 +55,7 @@ docker compose up -d --build
 
 When everything is done and tested on local, we can publish the docker image
 to a registry. The easiest (and cheapest) registry is the
-[Docker Hub](https://hub.docker.com).  We can then pull the image from any 
+[Docker Hub](https://hub.docker.com). We can then pull the image from any
 machine (including Kubernetes).
 
 First, build the docker image:
@@ -75,4 +75,21 @@ Push the renamed tag to the registry:
 
 ```bash
 docker push marcellinoco/segment3d:segment3d-worker
+```
+
+## Production Deployment
+
+To run the service inside Kubernetes, the manifest file is in
+`segment3d-worker.yaml`.
+
+First, setup the configmap for environment variables:
+
+```bash
+kubectl create configmap segment3d-worker-configmap --from-env-file=.env
+```
+
+Then, run the service:
+
+```bash
+kubectl apply -f segment3d-worker.yaml
 ```
