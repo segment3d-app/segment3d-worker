@@ -7,6 +7,15 @@ videos/images through 3D gaussian splatting and segmentation pipeline. The
 application listens to RabbitMQ queues for incoming tasks and processes them
 using advanced algorithm for rendering and segmenting 3d scenes.
 
+## Environment Variables
+
+Variables will be read from the `.env` file. Make sure to insert the correct 
+values. On your first setup, duplicate the env template:
+
+```bash
+cp .env.example .env
+```
+
 ## Development
 
 Before development, prepare a Python virtual environment:
