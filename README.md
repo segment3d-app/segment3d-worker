@@ -16,6 +16,12 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
+Then install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
 Then run the entry script:
 
 ```bash
