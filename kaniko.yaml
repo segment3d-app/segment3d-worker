@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Pod
+
+metadata:
+  name: segment3d-worker-builder
+
+spec:
+  containers:
+    - name: segment3d-worker-builder
+      image: gcr.io/kaniko-project/executor:latest
+      args:
+        [
+          "--dockerfile=/workspace/Dockerfile",
+          "--context=dir://workspace",
+          "--no-push",
+        ]
+      volumeMounts:
+        - name: pvol-segment3d-worker
+          mountPath: /workspace
+
+  restartPolicy: Never
+
+  volumes:
+    - name: pvol-segment3d-worker
+      persistentVolumeClaim:
+        claimName: pvclaim-nadhif
