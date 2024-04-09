@@ -7,6 +7,15 @@ videos/images through 3D gaussian splatting and segmentation pipeline. The
 application listens to RabbitMQ queues for incoming tasks and processes them
 using advanced algorithm for rendering and segmenting 3d scenes.
 
+## Cloning the repository
+
+This repository contains submodules, thus please clone with:
+
+```bash
+git clone https://github.com/segment3d-app/segment3d-worker --recursive
+git submodule update --init --recursive
+```
+
 ## Environment Variables
 
 Variables will be read from the `.env` file. Make sure to insert the correct
