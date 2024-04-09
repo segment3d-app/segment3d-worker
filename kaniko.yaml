@@ -12,6 +12,7 @@ spec:
         [
           "--dockerfile=/workspace/Dockerfile",
           "--context=dir://workspace",
+          "--destination=segment3d-worker",
           "--no-push",
         ]
       volumeMounts:
