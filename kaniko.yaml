@@ -10,8 +10,8 @@ spec:
       image: gcr.io/kaniko-project/executor:latest
       args:
         [
-          "--context=.",
-          "--dockerfile=./Dockerfile",
+          "--context=dir://2024/worker",
+          "--dockerfile=/workspace/2024/worker/Dockerfile",
           "--destination=segment3d-worker",
           "--no-push",
         ]
