@@ -71,38 +71,37 @@ In this section, we provide 2 approaches to build and push image to registry.
 
 ### Single-platform Build
 
-First, build the docker image:
-
-```bash
-docker build -t segment3d-worker .
-```
-
-Before pushing the image to the hub, rename the tag to supported namespace:
+Build and push the docker image:
 
 ```bash
 # Namespace: <USERNAME>/<REPOSITORY>:<TAG>
-docker tag segment3d-worker marcellinoco/segment3d:segment3d-worker
+docker build -t marcellinoco/segment3d:segment3d-worker .
+docker push marcellinoco/segment3d:segment3d-worker
 ```
 
-Push the renamed tag to the registry:
+Or you can use the utility script:
 
 ```bash
-docker push marcellinoco/segment3d:segment3d-worker
+sh ./scripts/build.sh
 ```
 
 ### Multiplatform Build
 
-First, setup multiplatform docker builder:
+Build and push the docker image with multiplatform builder:
 
 ```bash
+# Setup multiplatform docker builder
 docker buildx create --name multiarch-builder --driver docker-container --use
 docker buildx inspect --bootstrap
+
+# Build and push docker image
+docker buildx build --platform linux/amd64,linux/arm64 -t marcellinoco/segment3d:segment3d-worker --push .
 ```
 
-Next, build and push the docker image:
+Or you can use the utility script:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t marcellinoco/segment3d:segment3d-worker --push .
+sh ./scripts/build-multiplatform.sh
 ```
 
 ## Production Deployment
@@ -116,8 +115,8 @@ First, setup the configmap for environment variables:
 kubectl create configmap segment3d-worker-configmap --from-env-file=.env
 ```
 
-Then, run the service:
+Then, run the containers:
 
 ```bash
-kubectl apply -f segment3d-worker.yaml
+kubectl apply -f manifest.yaml
 ```
