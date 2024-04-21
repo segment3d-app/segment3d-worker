@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+
+metadata:
+  name: kaniko
+
+spec:
+  containers:
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:latest
+
+      args:
+        - "--dockerfile=Dockerfile"
+        - "--context=git://github.com/segment3d-app/segment3d-worker.git"
+        - "--destination=marcellinoco/segment3d-worker:latest"
+
+      volumeMounts:
+        - name: kaniko-secret
+          mountPath: /kaniko/.docker
+
+        - name: pvol-nadhif
+          mountPath: /workspace
+
+      resources:
+        requests:
+          ephemeral-storage: "128Gi"
+          memory: "16Gi"
+
+        limits:
+          ephemeral-storage: "128Gi"
+          memory: "16Gi"
+
+  restartPolicy: Never
+
+  volumes:
+    - name: kaniko-secret
+      secret:
+        secretName: docker-marcellinoco
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+
+    - name: pvol-nadhif
+      persistentVolumeClaim:
+        claimName: pvclaim-nadhif
