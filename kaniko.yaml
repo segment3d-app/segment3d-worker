@@ -13,6 +13,9 @@ spec:
         - "--dockerfile=Dockerfile"
         - "--context=git://github.com/segment3d-app/segment3d-worker.git"
         - "--destination=marcellinoco/segment3d-worker:latest"
+        - "--compressed-caching=false"
+        - "--cache-copy-layers=true"
+        - "--cache=true"
 
       volumeMounts:
         - name: kaniko-secret
