@@ -2,8 +2,6 @@ aio-pika==9.4.1
 aiormq==6.8.0
 idna==3.6
 multidict==6.0.5
-numpy==1.26.4
 pamqp==3.3.0
-plyfile==1.0.3
 python-dotenv==1.0.1
 yarl==1.9.4
