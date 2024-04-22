@@ -11,7 +11,7 @@ spec:
 
       args:
         - "--dockerfile=Dockerfile"
-        - "--context=git://github.com/segment3d-app/segment3d-worker.git"
+        - "--context=dir:///workspace/2024/worker"
         - "--destination=marcellinoco/segment3d-worker:latest"
         - "--compressed-caching=false"
         - "--cache-copy-layers=true"
